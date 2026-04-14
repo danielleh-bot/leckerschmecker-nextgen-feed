@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Leckerschmecker Feed — Auto-Scroll Demo</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #1a1a2e;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    overflow: hidden;
+  }
+
+  .demo-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 24px;
+  }
+
+  /* Phone frame */
+  .phone {
+    width: 390px;
+    height: 844px;
+    border-radius: 50px;
+    background: #111;
+    padding: 12px;
+    box-shadow:
+      0 0 0 2px #333,
+      0 40px 80px rgba(0,0,0,0.6),
+      0 0 120px rgba(45,90,39,0.15);
+    position: relative;
+  }
+
+  /* Notch */
+  .phone::before {
+    content: '';
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 126px;
+    height: 34px;
+    background: #111;
+    border-radius: 0 0 20px 20px;
+    z-index: 100;
+  }
+
+  /* Dynamic island dot */
+  .phone::after {
+    content: '';
+    position: absolute;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 12px;
+    height: 12px;
+    background: #1a1a2e;
+    border-radius: 50%;
+    z-index: 101;
+  }
+
+  .phone-screen {
+    width: 100%;
+    height: 100%;
+    border-radius: 40px;
+    overflow: hidden;
+    position: relative;
+    background: #fff;
+  }
+
+  .phone-screen iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+    transform-origin: top left;
+  }
+
+  /* Scroll indicator bar */
+  .scroll-track {
+    position: absolute;
+    right: 4px;
+    top: 48px;
+    bottom: 48px;
+    width: 3px;
+    border-radius: 2px;
+    background: rgba(0,0,0,0.06);
+    z-index: 50;
+    opacity: 0;
+    transition: opacity 0.4s;
+  }
+
+  .scroll-track.visible {
+    opacity: 1;
+  }
+
+  .scroll-thumb {
+    width: 100%;
+    border-radius: 2px;
+    background: rgba(0,0,0,0.35);
+    position: absolute;
+    top: 0;
+    transition: height 0.1s;
+  }
+
+  /* Fake cursor / touch indicator */
+  .touch-indicator {
+    position: absolute;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(45,90,39,0.3) 0%, rgba(45,90,39,0.08) 60%, transparent 70%);
+    pointer-events: none;
+    z-index: 200;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    transform: translate(-50%, -50%);
+  }
+
+  .touch-indicator.active {
+    opacity: 1;
+  }
+
+  /* Status text */
+  .status {
+    color: rgba(255,255,255,0.4);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #C8E06E;
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 0.4; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.3); }
+  }
+
+  /* Controls */
+  .controls {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+
+  .btn {
+    padding: 8px 20px;
+    border-radius: 100px;
+    border: 1px solid rgba(255,255,255,0.15);
+    background: rgba(255,255,255,0.06);
+    color: rgba(255,255,255,0.6);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: inherit;
+  }
+
+  .btn:hover {
+    background: rgba(255,255,255,0.12);
+    color: rgba(255,255,255,0.9);
+    border-color: rgba(255,255,255,0.3);
+  }
+
+  .btn.active {
+    background: #2D5A27;
+    color: #fff;
+    border-color: #2D5A27;
+  }
+
+  .speed-label {
+    color: rgba(255,255,255,0.3);
+    font-size: 11px;
+    font-weight: 600;
+  }
+</style>
+</head>
+<body>
+
+<div class="demo-wrapper">
+  <div class="phone">
+    <div class="phone-screen">
+      <iframe id="protoFrame" src="index.html"></iframe>
+      <div class="scroll-track" id="scrollTrack">
+        <div class="scroll-thumb" id="scrollThumb"></div>
+      </div>
+      <div class="touch-indicator" id="touchIndicator"></div>
+    </div>
+  </div>
+
+  <div class="status">
+    <span class="status-dot"></span>
+    <span id="statusText">Auto-scrolling prototype</span>
+  </div>
+
+  <div class="controls">
+    <span class="speed-label">Speed:</span>
+    <button class="btn" data-speed="0.5">0.5x</button>
+    <button class="btn active" data-speed="1">1x</button>
+    <button class="btn" data-speed="2">2x</button>
+    <button class="btn" id="pauseBtn">Pause</button>
+  </div>
+</div>
+
+<script>
+const iframe = document.getElementById('protoFrame');
+const scrollTrack = document.getElementById('scrollTrack');
+const scrollThumb = document.getElementById('scrollThumb');
+const touchIndicator = document.getElementById('touchIndicator');
+const statusText = document.getElementById('statusText');
+const pauseBtn = document.getElementById('pauseBtn');
+
+let speedMultiplier = 1;
+let isPaused = false;
+let animationId = null;
+
+// Scroll script — defines waypoints that simulate a real user browsing
+// Each waypoint: { target: scrollY (px), duration: ms, pauseAfter: ms, label: string }
+const scrollScript = [
+  { target: 0,    duration: 500,  pauseAfter: 2000, label: 'Viewing header & navigation' },
+  { target: 180,  duration: 1200, pauseAfter: 1500, label: 'Reading article title' },
+  { target: 420,  duration: 1400, pauseAfter: 2500, label: 'Looking at hero image' },
+  { target: 600,  duration: 800,  pauseAfter: 1200, label: 'Scanning article text' },
+  { target: 780,  duration: 600,  pauseAfter: 800,  label: 'Noticing recipe tags' },
+  { target: 900,  duration: 700,  pauseAfter: 1000, label: 'Scrolling to feed section' },
+  { target: 1050, duration: 1000, pauseAfter: 2200, label: 'Browsing hero card' },
+  { target: 1350, duration: 1200, pauseAfter: 2000, label: 'Viewing portrait cards' },
+  { target: 1650, duration: 1000, pauseAfter: 2500, label: 'Watching video card' },
+  { target: 1950, duration: 1000, pauseAfter: 1800, label: 'Exploring carousel' },
+  { target: 2200, duration: 800,  pauseAfter: 1500, label: 'Scrolling past native ad' },
+  { target: 2550, duration: 1200, pauseAfter: 2200, label: 'Viewing mosaic layout' },
+  { target: 2900, duration: 1100, pauseAfter: 2000, label: 'Browsing stream section' },
+  { target: 3250, duration: 1000, pauseAfter: 1800, label: 'Seeing three-up cards' },
+  { target: 3550, duration: 1000, pauseAfter: 1500, label: 'Second carousel' },
+  { target: 3900, duration: 1200, pauseAfter: 2000, label: 'Final stream section' },
+  { target: 4200, duration: 800,  pauseAfter: 1500, label: 'Reaching load more' },
+  // Scroll back to top
+  { target: 0,    duration: 2500, pauseAfter: 2000, label: 'Back to top — looping' },
+];
+
+// Easing: ease-in-out cubic
+function easeInOutCubic(t) {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
+// Add slight random jitter to make scrolling feel human
+function humanize(value, variance) {
+  return value + (Math.random() - 0.5) * 2 * variance;
+}
+
+// Get the iframe's document for scrolling
+function getIframeDoc() {
+  try {
+    return iframe.contentDocument || iframe.contentWindow.document;
+  } catch (e) {
+    return null;
+  }
+}
+
+function getScrollableElement() {
+  const doc = getIframeDoc();
+  if (!doc) return null;
+  return doc.documentElement || doc.body;
+}
+
+function getCurrentScroll() {
+  const doc = getIframeDoc();
+  if (!doc) return 0;
+  return doc.documentElement.scrollTop || doc.body.scrollTop || 0;
+}
+
+function getMaxScroll() {
+  const el = getScrollableElement();
+  if (!el) return 1;
+  const doc = getIframeDoc();
+  const scrollHeight = Math.max(
+    doc.body.scrollHeight || 0,
+    doc.documentElement.scrollHeight || 0
+  );
+  const clientHeight = iframe.clientHeight;
+  return Math.max(scrollHeight - clientHeight, 1);
+}
+
+function setScroll(y) {
+  const doc = getIframeDoc();
+  if (!doc) return;
+  doc.documentElement.scrollTop = y;
+  doc.body.scrollTop = y;
+}
+
+// Update scroll indicator
+function updateScrollIndicator() {
+  const current = getCurrentScroll();
+  const max = getMaxScroll();
+  const ratio = current / max;
+  const trackHeight = scrollTrack.clientHeight;
+  const thumbHeight = Math.max(40, trackHeight * (iframe.clientHeight / (max + iframe.clientHeight)));
+
+  scrollThumb.style.height = thumbHeight + 'px';
+  scrollThumb.style.top = (ratio * (trackHeight - thumbHeight)) + 'px';
+}
+
+// Update touch indicator position
+function showTouch(x, y) {
+  touchIndicator.style.left = x + 'px';
+  touchIndicator.style.top = y + 'px';
+  touchIndicator.classList.add('active');
+}
+
+function hideTouch() {
+  touchIndicator.classList.remove('active');
+}
+
+// Animate scroll to target
+function animateScrollTo(from, to, duration) {
+  return new Promise((resolve) => {
+    const adjustedDuration = duration / speedMultiplier;
+    const start = performance.now();
+
+    // Show touch indicator in the middle of the screen
+    const phoneScreen = document.querySelector('.phone-screen');
+    const rect = phoneScreen.getBoundingClientRect();
+    const touchX = rect.width * (0.45 + Math.random() * 0.1);
+    const touchY = rect.height * (0.5 + Math.random() * 0.15);
+    showTouch(touchX, touchY);
+    scrollTrack.classList.add('visible');
+
+    function step(timestamp) {
+      if (isPaused) {
+        animationId = requestAnimationFrame(step);
+        return;
+      }
+
+      const elapsed = timestamp - start;
+      const progress = Math.min(elapsed / adjustedDuration, 1);
+      const easedProgress = easeInOutCubic(progress);
+
+      const currentPos = from + (to - from) * easedProgress;
+      setScroll(currentPos);
+      updateScrollIndicator();
+
+      // Move touch indicator slightly during scroll (simulates finger movement)
+      if (to !== from) {
+        const moveDir = to > from ? 1 : -1;
+        const fingerOffset = moveDir * (1 - easedProgress) * 30;
+        showTouch(touchX + (Math.random() - 0.5) * 3, touchY + fingerOffset);
+      }
+
+      if (progress < 1) {
+        animationId = requestAnimationFrame(step);
+      } else {
+        resolve();
+      }
+    }
+
+    animationId = requestAnimationFrame(step);
+  });
+}
+
+// Wait/pause
+function wait(ms) {
+  return new Promise((resolve) => {
+    const adjustedMs = ms / speedMultiplier;
+    const start = Date.now();
+
+    function check() {
+      if (isPaused) {
+        setTimeout(check, 50);
+        return;
+      }
+      if (Date.now() - start >= adjustedMs) {
+        resolve();
+      } else {
+        setTimeout(check, 50);
+      }
+    }
+    check();
+  });
+}
+
+// Main scroll loop
+async function runScrollDemo() {
+  // Wait for iframe to load
+  await new Promise((resolve) => {
+    if (iframe.contentDocument && iframe.contentDocument.readyState === 'complete') {
+      resolve();
+    } else {
+      iframe.onload = resolve;
+    }
+  });
+
+  // Brief initial pause
+  await wait(1500);
+
+  while (true) {
+    for (const waypoint of scrollScript) {
+      const from = getCurrentScroll();
+      const to = Math.min(waypoint.target, getMaxScroll());
+
+      statusText.textContent = waypoint.label;
+
+      // Animate the scroll with slight human variance
+      const duration = humanize(waypoint.duration, waypoint.duration * 0.1);
+      await animateScrollTo(from, to, Math.max(duration, 200));
+
+      // Hide touch and scrollbar during pause (like finger lifted)
+      hideTouch();
+      await wait(300);
+      scrollTrack.classList.remove('visible');
+
+      // Pause at this waypoint
+      const pause = humanize(waypoint.pauseAfter, waypoint.pauseAfter * 0.15);
+      await wait(Math.max(pause, 200));
+    }
+  }
+}
+
+// Speed controls
+document.querySelectorAll('.btn[data-speed]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.btn[data-speed]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    speedMultiplier = parseFloat(btn.dataset.speed);
+  });
+});
+
+// Pause/resume
+pauseBtn.addEventListener('click', () => {
+  isPaused = !isPaused;
+  pauseBtn.textContent = isPaused ? 'Resume' : 'Pause';
+  pauseBtn.classList.toggle('active', isPaused);
+  if (isPaused) {
+    statusText.textContent = 'Paused';
+  }
+});
+
+// Start the demo
+runScrollDemo();
+</script>
+</body>
+</html>
